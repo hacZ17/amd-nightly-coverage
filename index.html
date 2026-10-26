@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AMD nightly coverage review</title>
+<style>
+  :root { color-scheme: light; --bg:#f6f7f9; --card:#fff; --ink:#1c1f24; --muted:#5c6570; --line:#e3e6eb;
+    --ok:#0f7a4a; --okbg:#e7f6ee; --warn:#8a5a00; --warnbg:#fff4dc; --bad:#a12626; --badbg:#fdecec; --skip:#4b5563; --skipbg:#eef0f3; }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 15px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+  main { max-width: 1180px; margin: 0 auto; padding: 28px 20px 64px; }
+  h1 { font-size: 28px; margin: 0 0 8px; }
+  h2 { font-size: 18px; margin: 28px 0 10px; }
+  p { margin: 0 0 10px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .stats { display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 18px 0; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .stat b { display:block; font-size: 28px; }
+  .stat span { color: var(--muted); font-size: 13px; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  .bars { background:var(--card); border:1px solid var(--line); border-radius: 10px; padding: 16px; }
+  .bar-row { display:grid; grid-template-columns: 140px 1fr 70px; gap: 10px; align-items:center; margin: 8px 0; }
+  .track { display:flex; height: 22px; background:#eef0f3; border-radius: 4px; overflow:hidden; }
+  .track i { display:block; height:100%; }
+  .c { background:#1f8a56; } .p { background:#d89a1a; } .m { background:#c44747; }
+  .legend { display:flex; gap: 16px; font-size: 13px; color: var(--muted); margin-top: 8px; }
+  .legend i { display:inline-block; width:10px; height:10px; margin-right:4px; }
+  .note { background:#fff8e8; border:1px solid #ead7a2; border-radius: 10px; padding: 12px 14px; }
+  .filters { display:flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 12px; }
+  button { border:1px solid var(--line); background:#fff; border-radius: 999px; padding: 6px 12px; cursor:pointer; font: inherit; }
+  button.on { background:#1c1f24; color:#fff; border-color:#1c1f24; }
+  .wrap { overflow:auto; background:#fff; border:1px solid var(--line); border-radius: 10px; }
+  table { width:100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align:left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { position: sticky; top: 0; background:#f3f4f6; }
+  tr.Covered td:first-child { box-shadow: inset 3px 0 var(--ok); }
+  tr.Partial td:first-child { box-shadow: inset 3px 0 var(--warn); }
+  tr.Missing td:first-child { box-shadow: inset 3px 0 var(--bad); }
+  .tag { font-size: 12px; font-weight: 600; }
+  .tag.Covered { color: var(--ok); } .tag.Partial { color: var(--warn); } .tag.Missing { color: var(--bad); } .tag.skip { color: var(--skip); }
+  @media (max-width: 800px) { .stats { grid-template-columns: 1fr 1fr; } .bar-row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>AMD nightly coverage review</h1>
+  <p>Accuracy is on MI300. Performance is not. <b id="missingLead"></b> of 54 CUDA nightly jobs from commit 198c210 have no AMD nightly job. An open pull request is named in the note and is still a gap.</p>
+  <p class="muted">CUDA: .buildkite/cuda/test-nightly.yml at 198c2105930bd1bac0b0966ffd0997cdd84d4790, 54 jobs. AMD: .buildkite/amd/test-amd-nightly.yml on main c84638f, 30 jobs.</p>
+  <section class="stats" id="stats"></section>
+  <h2>Match by area</h2>
+  <div class="bars" id="bars"></div>
+  <p class="note"><b>Review the open owners before a new PR.</b> TTS perf is #9309 and #9310. Qwen3-Omni no-async, async-chunk, and multi-replica are #9427. TTS function is #7690. Quantization is #7606. Those rows stay Missing until the pull request merges.</p>
+  <h2>Jobs</h2>
+  <div class="filters" id="filters"></div>
+  <p class="muted" id="shown"></p>
+  <div class="wrap"><table><thead><tr><th>CUDA nightly job</th><th>CUDA target</th><th>AMD nightly job</th><th>Status</th><th>Note</th></tr></thead><tbody id="body"></tbody></table></div>
+  <h2>On AMD nightly and not in this CUDA SHA</h2>
+  <div class="wrap"><table><thead><tr><th>AMD nightly job</th><th>Relation to CUDA SHA 198c210</th></tr></thead><tbody id="ahead"></tbody></table></div>
+  <h2>Same cases, not the same job count</h2>
+  <p>One MI325 job replaces each H100 and L4 pair. There is no mi300_3 pool, so the 3-GPU distributed job cannot be copied. Leave MI325 numeric baselines unset until a nightly score exists. AutoRound, GGUF, and MiniMax FP8 stay out until one MI300 run shows the kernel exists.</p>
+</main>
+<script>
+const DATA = {"rows": [{"cuda": "Omni Function Test, H100, 1 GPU", "target": "test_minicpmo_4_5_duplex_expansion.py, test_minicpmo_4_5_window.py", "amd": "None", "status": "Missing", "note": "Same files as the MiniCPM duplex job"}, {"cuda": "Omni Function Test, H100, 2 GPU", "target": "test_qwen3_omni_multi_replicas.py, cards_2", "amd": "Qwen3-Omni Function Expansion runs test_qwen3_omni_expansion.py", "status": "Partial", "note": "Open #9427 adds multi_replicas.py"}, {"cuda": "MiniCPM-o 4.5 Duplex Test", "target": "test_minicpmo_4_5_duplex_expansion.py, test_minicpmo_4_5_window.py", "amd": "None", "status": "Missing", "note": "cards_1"}, {"cuda": "Omni Doc Test, L4, 4 GPU", "target": "tests/examples, omni, cards_4", "amd": "None", "status": "Missing", "note": "AMD docs jobs are cards_2"}, {"cuda": "Omni Doc Test, H100, 2 GPU", "target": "tests/examples, omni, cards_2", "amd": "Qwen3-Omni Documentation Examples", "status": "Covered", "note": "Qwen2.5 docs are a separate AMD job"}, {"cuda": "Omni Accuracy Test", "target": "test_qwen3_omni.py, cards_2", "amd": "Qwen3-Omni Accuracy, mi300_2", "status": "Covered", "note": ""}, {"cuda": "MiniCPM-o 4.5 Accuracy Test", "target": "test_minicpmo_4_5.py, cards_1 or cards_2", "amd": "MiniCPM-o 4.5 Accuracy, mi300_1", "status": "Covered", "note": "AMD runs the 1-GPU cases"}, {"cuda": "Omni-DuplexEval CI Guard", "target": "test_omni_duplex_eval_ci.py, cards_2", "amd": "MiniCPM-o Omni-DuplexEval CI Guard uses test_minicpmo_4_5_omni_duplex_eval.json", "status": "Partial", "note": "Different test file"}, {"cuda": "Omni Perf, no async chunk", "target": "test_qwen3_omni_no_async_chunk.json, cards_2", "amd": "None", "status": "Missing", "note": "Open #9427"}, {"cuda": "Omni Perf, async chunk", "target": "test_qwen3_omni_async_chunk.json, cards_2", "amd": "None", "status": "Missing", "note": "Open #9427"}, {"cuda": "MiniCPM-o 4.5 Perf", "target": "test_minicpmo_4_5.json, cards_1", "amd": "None", "status": "Missing", "note": ""}, {"cuda": "MiniCPM-o 4.5 Duplex Seed-TTS Perf", "target": "test_minicpmo_4_5_duplex_seed_tts.json, cards_1", "amd": "None", "status": "Missing", "note": ""}, {"cuda": "Multi-replica startup, 4 GPU", "target": "test_qwen3_omni_multi_replicas.py, cards_4", "amd": "None", "status": "Missing", "note": "Open #9427"}, {"cuda": "Entrypoint Test, H100", "target": "tests/entrypoints, full_model, cards_2", "amd": "None", "status": "Missing", "note": ""}, {"cuda": "TTS Function Test, L4", "target": "tests/e2e, tts, cards_1, ignore accuracy", "amd": "None", "status": "Missing", "note": "Open #7690 claims this suite"}, {"cuda": "TTS Perf, 1 GPU", "target": "test_tts.json, cards_1, Voxtral", "amd": "None", "status": "Missing", "note": "Open #9309"}, {"cuda": "TTS Perf, 2 GPU", "target": "test_tts.json, cards_2, three Qwen3-TTS cases", "amd": "None", "status": "Missing", "note": "Open #9310"}, {"cuda": "Tiny diffusion multi-GPU, 2 GPU", "target": "tests/model_tests/diffusion, cards_2, core_model weights", "amd": "ROCm Tiny Diffusion Multi-GPU, 2 GPU", "status": "Covered", "note": ""}, {"cuda": "Tiny diffusion multi-GPU, 4 GPU", "target": "tests/model_tests/diffusion, cards_4", "amd": "ROCm Tiny Diffusion Multi-GPU, 4 GPU", "status": "Covered", "note": ""}, {"cuda": "Qwen-Image function, H100, 1 GPU", "target": "test_qwen_image_expansion.py, cards_1", "amd": "Qwen-Image Official-Weight Smoke runs test_qwen_image.py", "status": "Partial", "note": "Smoke is not the expansion file"}, {"cuda": "Qwen-Image function, H100, 2 GPU", "target": "test_qwen_image_expansion.py, cards_2", "amd": "None", "status": "Missing", "note": ""}, {"cuda": "Qwen-Image AutoRound, L4, 1 GPU", "target": "test_qwen_image_autoround_w4a16_expansion.py", "amd": "None", "status": "Missing", "note": "Qualify the ROCm quant path before adding"}, {"cuda": "Diffusion image doc test", "target": "tests/examples/*/test_text_to_image.py", "amd": "None", "status": "Missing", "note": ""}, {"cuda": "Qwen-Image accuracy", "target": "test_qwen_image.py and test_diffusers_backend_similarity.py", "amd": "Qwen-Image Diffusers Accuracy runs test_qwen_image.py only", "status": "Partial", "note": "Backend similarity command is absent"}, {"cuda": "JoyAI-Image-Edit accuracy", "target": "test_joy_image_edit.py, cards_1", "amd": "JoyImage GPU inference is a different test", "status": "Do not add", "note": "Removed from current CUDA main"}, {"cuda": "HunyuanImage3 accuracy", "target": "pixel accuracy and LoRA, cards_4", "amd": "HunyuanImage3 Offline Pixel Accuracy and LoRA Accuracy", "status": "Covered", "note": "AMD splits one CUDA job into two"}, {"cuda": "Qwen-Image perf, 1 GPU", "target": "test_qwen_image_vllm_omni.json, cards_1", "amd": "None", "status": "Missing", "note": ""}, {"cuda": "Qwen-Image perf, 4 GPU", "target": "test_qwen_image_vllm_omni.json, cards_4", "amd": "None", "status": "Missing", "note": ""}, {"cuda": "Wan2.2 T2V function, 1 GPU", "target": "test_wan22_expansion.py, cards_1", "amd": "None", "status": "Missing", "note": ""}, {"cuda": "Wan2.2 T2V function, 2 GPU", "target": "test_wan22_expansion.py, cards_2", "amd": "None", "status": "Missing", "note": ""}, {"cuda": "Wan2.2 I2V/TI2V function, 1 GPU", "target": "test_wan22_expansion.py, cards_1", "amd": "None", "status": "Missing", "note": ""}, {"cuda": "Wan2.2 I2V/TI2V function, 2 GPU", "target": "test_wan22_expansion.py, cards_2", "amd": "None", "status": "Missing", "note": ""}, {"cuda": "HunyuanVideo-1.5 function", "target": "test_hunyuan_video_15_expansion.py, cards_1 or cards_2", "amd": "HunyuanVideo-1.5 Default T2V Smoke, mi300_1", "status": "Partial", "note": "Smoke is narrower than the CUDA function job"}, {"cuda": "LingBot function", "target": "test_lingbot_video_expansion.py, test_lingbot_video_moe.py, test_lingbot_world_v2.py", "amd": "LingBot-Video Dense CFG-off Smoke, expansion only", "status": "Partial", "note": "MoE and World are absent"}, {"cuda": "Image-to-video doc test", "target": "test_image_to_video.py, cards_1", "amd": "None", "status": "Missing", "note": ""}, {"cuda": "Wan2.2 AutoRound function", "target": "test_wan22_autoround_w4a16_expansion.py", "amd": "None", "status": "Missing", "note": "Qualify the ROCm quant path before adding"}, {"cuda": "Wan2.2 device-postprocess equivalence", "target": "test_device_postprocess_equivalence.py, cards_1", "amd": "None", "status": "Missing", "note": ""}, {"cuda": "Wan2.2 I2V accuracy", "target": "test_wan22_i2v_video_similarity.py, cards_1 or cards_2", "amd": "Wan2.2 I2V Accuracy, mi300_2", "status": "Covered", "note": ""}, {"cuda": "MiniMax-H3 I2VA, Ref2VA, timeline accuracy", "target": "cards_2 or cards_4", "amd": "Timeline Guide Accuracy and I2VA Ref2VA Accuracy", "status": "Covered", "note": "AMD splits one CUDA job into two"}, {"cuda": "HunyuanVideo-1.5 accuracy", "target": "T2V and I2V similarity", "amd": "HunyuanVideo-1.5 Video Similarity, mi300_1", "status": "Covered", "note": ""}, {"cuda": "Video perf, 1 GPU", "target": "test_wan22_i2v_vllm_omni.json, cards_1", "amd": "None", "status": "Missing", "note": ""}, {"cuda": "Video perf, 2 GPU", "target": "test_wan22_i2v_vllm_omni.json and test_cosmos3_vllm_omni.json", "amd": "Cosmos3 T2I Function is not this perf job", "status": "Missing", "note": ""}, {"cuda": "HunyuanVideo-1.5 perf", "target": "test_hunyuanvideo15_t2v_vllm_omni.json, test_hunyuanvideo15_i2v_vllm_omni.json", "amd": "None", "status": "Missing", "note": ""}, {"cuda": "MiniMax-H3 perf", "target": "test_minimax_h3_vllm_omni.json, cards_4", "amd": "None", "status": "Missing", "note": ""}, {"cuda": "LingBot perf", "target": "test_lingbot_video_vllm_omni.json, cards_1", "amd": "None", "status": "Missing", "note": ""}, {"cuda": "Diffusion distributed, L4, 2 GPU", "target": "tests/diffusion/distributed, cards_2", "amd": "None", "status": "Missing", "note": "One MI325 cards_2 job covers the H100 twin"}, {"cuda": "Diffusion distributed, L4, 3 GPU", "target": "tests/diffusion/distributed, cards_3", "amd": "None", "status": "Missing", "note": "No mi300_3 pool"}, {"cuda": "Diffusion distributed, L4, 4 GPU", "target": "tests/diffusion/distributed, cards_4", "amd": "None", "status": "Missing", "note": "One MI325 cards_4 job covers the H100 twin"}, {"cuda": "Diffusion distributed, H100, 2 GPU", "target": "tests/diffusion/distributed, cards_2", "amd": "None", "status": "Missing", "note": "Same cases as the L4 2-GPU job"}, {"cuda": "Diffusion distributed, H100, 4 GPU", "target": "tests/diffusion/distributed, cards_4", "amd": "None", "status": "Missing", "note": "Same cases as the L4 4-GPU job"}, {"cuda": "Diffusion offloader", "target": "tests/diffusion/offloader, cards_1", "amd": "Stable Audio CPU Offload only", "status": "Partial", "note": ""}, {"cuda": "Diffusion quantization, H100, 1 GPU", "target": "tests/diffusion/quantization, cards_1", "amd": "None", "status": "Missing", "note": "Open #7606"}, {"cuda": "MiniMax-H3 FP8 quality, 2 GPU", "target": "test_minimax_h3_quantization_quality.py, cards_2", "amd": "None", "status": "Missing", "note": "Qualify the ROCm FP8 path before adding"}, {"cuda": "Diffusion quantization, L4", "target": "tests/diffusion/quantization plus vllm-gguf-plugin", "amd": "None", "status": "Missing", "note": "Open #7606. Qualify GGUF on ROCm before adding"}], "ahead": [{"job": "Qwen-Image 2.1 Accuracy", "note": "On AMD nightly and on current CUDA main. Not in CUDA SHA 198c210."}, {"job": "Qwen3-Omni Seed-TTS Realtime Perf", "note": "On AMD nightly and on current CUDA main. Not in CUDA SHA 198c210."}, {"job": "Qwen3-Omni AITER-on Smoke", "note": "AMD-only nightly job."}, {"job": "CosyVoice3 online and offline", "note": "AMD-only nightly jobs."}, {"job": "Pi0.5 CPU, Omni processor, PersonaPlex temporal", "note": "AMD-only nightly jobs."}], "groups": [{"name": "Omni and TTS", "covered": 3, "partial": 2, "missing": 12}, {"name": "Diffusion", "covered": 6, "partial": 4, "missing": 12}, {"name": "Perf and infra", "covered": 0, "partial": 1, "missing": 13}]};
+const filters = ["Missing", "Partial", "Covered", "Do not add", "All"];
+let current = "Missing";
+const counts = {};
+for (const name of ["Covered","Partial","Missing","Do not add"]) counts[name] = DATA.rows.filter(r => r.status === name).length;
+document.getElementById("missingLead").textContent = counts.Missing;
+document.getElementById("stats").innerHTML = [
+  ["Covered", counts.Covered + " / 54", "ok"],
+  ["Partial", counts.Partial, "warn"],
+  ["Missing", counts.Missing, "bad"],
+  ["Do not add", counts["Do not add"], ""]
+].map(([label, value, cls]) => `<div class="stat"><b class="${cls}">${value}</b><span>${label}</span></div>`).join("");
+const max = Math.max(...DATA.groups.map(g => g.covered + g.partial + g.missing));
+document.getElementById("bars").innerHTML = DATA.groups.map(g => {
+  const total = g.covered + g.partial + g.missing || 1;
+  const w = (n) => (n / max * 100).toFixed(1);
+  return `<div class="bar-row"><div>${g.name}</div><div class="track"><i class="c" style="width:${w(g.covered)}%"></i><i class="p" style="width:${w(g.partial)}%"></i><i class="m" style="width:${w(g.missing)}%"></i></div><div>${g.missing} missing</div></div>`;
+}).join("") + `<div class="legend"><span><i class="c"></i>Covered</span><span><i class="p"></i>Partial</span><span><i class="m"></i>Missing</span></div>
+<p class="muted">Job count by area. CUDA SHA 198c210 versus AMD nightly on main c84638f. The JoyAI row is omitted from this chart.</p>`;
+function draw() {
+  const rows = current === "All" ? DATA.rows : DATA.rows.filter(r => r.status === current);
+  document.getElementById("shown").textContent = rows.length + " jobs shown. Filter starts on Missing.";
+  document.getElementById("body").innerHTML = rows.map(r => `<tr class="${r.status === "Do not add" ? "skip" : r.status}"><td>${r.cuda}</td><td>${r.target}</td><td>${r.amd}</td><td class="tag ${r.status === "Do not add" ? "skip" : r.status}">${r.status}</td><td>${r.note}</td></tr>`).join("");
+  document.querySelectorAll("#filters button").forEach(b => b.classList.toggle("on", b.dataset.f === current));
+}
+document.getElementById("filters").innerHTML = filters.map(f => `<button data-f="${f}" type="button">${f}</button>`).join("");
+document.getElementById("filters").onclick = (e) => { if (e.target.dataset.f) { current = e.target.dataset.f; draw(); } };
+document.getElementById("ahead").innerHTML = DATA.ahead.map(r => `<tr><td>${r.job}</td><td>${r.note}</td></tr>`).join("");
+draw();
+</script>
+</body>
+</html>
